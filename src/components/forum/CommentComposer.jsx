@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/lib/AuthContext";
 import { encryptText } from "@/lib/crypto";
-import { getAnonIdentity } from "@/lib/anon";
-import { anonSecretHash } from "@/lib/anon";
+import { anonSecretHash, getAnonIdentity } from "@/lib/anon";
+import { useAnonName } from "@/lib/useAnon";
 import { createComment } from "@/lib/server-fns";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 
 export default function CommentComposer({
   postId,
@@ -19,35 +16,38 @@ export default function CommentComposer({
   onCancel,
   compact = false,
 }) {
-  const { user } = useAuth();
+  const handle = useAnonName();
   const [text, setText] = useState("");
-  const [anonymous, setAnonymous] = useState(!user);
   const [busy, setBusy] = useState(false);
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!text.trim()) return;
+    if (!text.trim() || busy) return;
+    const isPrivate = visibility === "private";
+    if (isPrivate && !ownerPublicKey) {
+      toast.error("Özel gönderiye yorum için kasa açık olmalı.");
+      return;
+    }
     setBusy(true);
     try {
-      const isPrivate = visibility === "private";
-      if (isPrivate && !ownerPublicKey) throw new Error("Özel gönderiye yorum için kasa anahtarı gerekli.");
       const encrypted = await encryptText(text.trim(), {
         visibility: isPrivate ? "private" : "public",
         ownerPublicKey,
       });
+
       const created = await createComment({
         data: {
           post_id: postId,
           parent_id: parent?.id || "",
           body_cipher: encrypted.cipher,
           envelopes: encrypted.envelopes,
-          visibility: isPrivate ? "private" : "public",
-          author_name: anonymous ? getAnonIdentity().name : user?.full_name || "kullanıcı",
-          anon_secret_hash: anonymous ? await anonSecretHash() : "",
-          anon_id: anonymous ? getAnonIdentity().id : "",
           depth: parent ? Math.min((parent.depth || 0) + 1, 10) : 0,
+          author_name: getAnonIdentity().name,
+          anon_id: getAnonIdentity().id,
+          anon_secret_hash: await anonSecretHash(),
         },
       });
+
       setText("");
       onCreated?.(created);
       toast.success("Yorum şifrelenip eklendi");
@@ -60,42 +60,35 @@ export default function CommentComposer({
 
   return (
     <form onSubmit={submit} className="space-y-2">
-      <Textarea
+      <textarea
         value={text}
         onChange={(event) => setText(event.target.value)}
-        placeholder={parent ? "Yanıtını yaz…" : "Şifrelenecek yorumunu yaz…"}
-        className="min-h-[80px] rounded-xl border-white/10 bg-white/[0.03] text-sm"
+        placeholder={parent ? "yanıtını yaz…" : "şifrelenecek yorumunu yaz…"}
+        className="min-h-[84px] w-full resize-y border border-[hsl(200_30%_18%)] bg-black/40 px-3 py-2.5 font-mono text-[13px] leading-relaxed text-white/90 outline-none transition placeholder:text-muted-foreground/60 focus:border-[hsl(var(--neon))]/60"
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submit(event);
         }}
       />
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={anonymous}
-            disabled={!user}
-            onChange={(event) => setAnonymous(event.target.checked)}
-            className="h-3 w-3 accent-[hsl(var(--neon))]"
-          />
-          anonim
-        </label>
-        <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          AES-256-GCM
-        </Label>
+        <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="h-1 w-1 bg-[hsl(var(--neon))]" /> {handle}
+        </span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground/60">
+          aes-256-gcm · istemcide şifrelenir
+        </span>
         <div className="ml-auto flex items-center gap-2">
           {onCancel && (
-            <Button type="button" size="sm" variant="ghost" className="rounded-lg" onClick={onCancel}>
-              Vazgeç
+            <Button type="button" size="sm" variant="ghost" className="rounded-none font-mono text-[10px] uppercase" onClick={onCancel}>
+              vazgeç
             </Button>
           )}
           <Button
             type="submit"
-            size={compact ? "sm" : "default"}
+            size="sm"
             disabled={busy || !text.trim()}
-            className="rounded-xl bg-white text-black hover:bg-white/90"
+            className="rounded-none bg-[hsl(var(--neon))] font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-black hover:bg-[hsl(var(--neon))]/85"
           >
-            <Send className="mr-1.5 h-3.5 w-3.5" /> {busy ? "Şifreleniyor…" : "Gönder"}
+            <Send className="mr-1.5 h-3.5 w-3.5" /> {busy ? "şifreleniyor…" : "gönder"}
           </Button>
         </div>
       </div>

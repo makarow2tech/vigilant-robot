@@ -1,29 +1,28 @@
-// Oturumluk kasa durumu: özel anahtar yalnızca bellekte / sessionStorage'da tutulur.
+// Oturumluk kasa durumu: özel anahtar yalnızca sessionStorage'da tutulur.
+// Kasa bu tarayıcının anonim kimliğine bağlıdır.
 const listeners = new Set();
 
-function sessionKey(userId) {
-  return `krypt.vault.${userId}`;
-}
+const SESSION_KEY = "krypt.vault.session";
 
-export function getSessionPrivateKey(userId) {
-  if (typeof window === "undefined" || !userId) return null;
+export function getSessionPrivateKey() {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(sessionKey(userId));
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-export function setSessionPrivateKey(userId, privateKeyJwk) {
-  if (typeof window === "undefined" || !userId) return;
-  window.sessionStorage.setItem(sessionKey(userId), JSON.stringify(privateKeyJwk));
+export function setSessionPrivateKey(privateKeyJwk) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(privateKeyJwk));
   listeners.forEach((fn) => fn());
 }
 
-export function lockVault(userId) {
-  if (typeof window === "undefined" || !userId) return;
-  window.sessionStorage.removeItem(sessionKey(userId));
+export function lockVault() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(SESSION_KEY);
   listeners.forEach((fn) => fn());
 }
 

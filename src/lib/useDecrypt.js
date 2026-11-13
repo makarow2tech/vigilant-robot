@@ -1,37 +1,30 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/AuthContext";
+import { useEffect, useRef, useState } from "react";
 import { decryptText } from "@/lib/crypto";
 import { getSessionPrivateKey } from "@/lib/vault";
 import { useVaultVersion } from "@/lib/useVault";
 
 // Şifreli kayıtları tarayıcıda çözer. Sunucu hiçbir zaman düz metni görmez.
-export function useDecryptedPosts(posts) {
-  const { user } = useAuth();
+// Liste kimliği her render'da değişse bile yalnızca kayıt kümesi değişince yeniden çözülür.
+
+function useDecryptedMap(records, decryptOne) {
   const version = useVaultVersion();
   const [map, setMap] = useState({});
+  const listRef = useRef(records);
+  listRef.current = records;
+  const signature = (records || []).map((record) => record.id).join(",");
 
   useEffect(() => {
     let alive = true;
-    const privateKeyJwk = user?.id ? getSessionPrivateKey(user.id) : null;
+    const list = listRef.current || [];
+    const privateKeyJwk = getSessionPrivateKey();
 
     (async () => {
       const entries = await Promise.all(
-        (posts || []).map(async (post) => {
+        list.map(async (record) => {
           try {
-            const title = await decryptText(post.title_cipher, post.envelopes, {
-              privateKeyJwk,
-              field: "title",
-            });
-            let body = "";
-            try {
-              body = await decryptText(post.body_cipher, post.envelopes, { privateKeyJwk, field: "body" });
-            } catch {
-              body = "";
-            }
-            return [post.id, { title, body }];
+            return [record.id, await decryptOne(record, privateKeyJwk)];
           } catch (error) {
-            console.error("[krypt] gönderi çözülemedi:", error?.message || error);
-            return [post.id, { locked: true }];
+            return [record.id, { locked: true, error: error?.code || "DECRYPT_FAILED" }];
           }
         })
       );
@@ -41,38 +34,23 @@ export function useDecryptedPosts(posts) {
     return () => {
       alive = false;
     };
-  }, [posts, user?.id, version]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, version]);
 
   return map;
 }
 
+export function useDecryptedPosts(posts) {
+  return useDecryptedMap(posts, async (post, privateKeyJwk) => {
+    const title = await decryptText(post.title_cipher, post.envelopes, { privateKeyJwk, field: "title" });
+    const body = await decryptText(post.body_cipher, post.envelopes, { privateKeyJwk, field: "body" });
+    return { title, body };
+  });
+}
+
 export function useDecryptedComments(comments) {
-  const { user } = useAuth();
-  const version = useVaultVersion();
-  const [map, setMap] = useState({});
-
-  useEffect(() => {
-    let alive = true;
-    const privateKeyJwk = user?.id ? getSessionPrivateKey(user.id) : null;
-
-    (async () => {
-      const entries = await Promise.all(
-        (comments || []).map(async (comment) => {
-          try {
-            const text = await decryptText(comment.body_cipher, comment.envelopes, { privateKeyJwk });
-            return [comment.id, { text }];
-          } catch {
-            return [comment.id, { locked: true }];
-          }
-        })
-      );
-      if (alive) setMap(Object.fromEntries(entries));
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [comments, user?.id, version]);
-
-  return map;
+  return useDecryptedMap(comments, async (comment, privateKeyJwk) => {
+    const text = await decryptText(comment.body_cipher, comment.envelopes, { privateKeyJwk });
+    return { text };
+  });
 }

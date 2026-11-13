@@ -1,19 +1,15 @@
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Eye, ImagePlus, Lock, LockKeyhole, Send, ShieldCheck } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Eye, ImagePlus, KeyRound, Loader2, LockKeyhole, Send, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
-import { useAuth } from "@/lib/AuthContext";
 import { encryptFields } from "@/lib/crypto";
 import { anonSecretHash, getAnonIdentity } from "@/lib/anon";
+import { useAnonId, useAnonName } from "@/lib/useAnon";
 import { useVaultVersion } from "@/lib/useVault";
 import { createPost, getMyProfile, getSiteConfig, listTopics } from "@/lib/server-fns";
 import VaultDialog from "@/components/crypto/VaultDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_site/submit")({
@@ -27,8 +23,9 @@ export const Route = createFileRoute("/_site/submit")({
 
 function SubmitPage() {
   const { config, topics } = Route.useLoaderData();
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const anonId = useAnonId();
+  const handle = useAnonName();
   const vaultVersion = useVaultVersion();
 
   const [title, setTitle] = useState("");
@@ -36,35 +33,30 @@ function SubmitPage() {
   const [topicId, setTopicId] = useState(topics?.[0]?.id || "");
   const [flair, setFlair] = useState("");
   const [visibility, setVisibility] = useState("public");
-  const [anonymous, setAnonymous] = useState(!user);
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
-  const [profile, setProfile] = useState(null);
+  const [publicKey, setPublicKey] = useState("");
 
   useEffect(() => {
-    if (!user) {
-      setProfile(null);
-      return;
-    }
-    getMyProfile().then(setProfile).catch(() => setProfile(null));
-  }, [user?.id, vaultVersion]);
+    if (!anonId) return;
+    getMyProfile({ data: { ownerKey: anonId } })
+      .then((profile) => setPublicKey(profile?.public_key || ""))
+      .catch(() => setPublicKey(""));
+  }, [anonId, vaultVersion]);
 
-  useEffect(() => {
-    setAnonymous(!user);
-  }, [user?.id]);
-
-  const publicKey = profile?.public_key || "";
-  const selectedTopic = topics.find((topic) => topic.id === topicId);
+  const selectedTopic = (topics || []).find((topic) => topic.id === topicId);
+  const maxLength = config.max_post_length || 20000;
 
   const submit = async (event) => {
     event.preventDefault();
+    if (busy) return;
     if (!title.trim() || !body.trim()) {
       toast.error("Başlık ve içerik gerekli.");
       return;
     }
-    if (body.length > (config.max_post_length || 20000)) {
-      toast.error(`İçerik en fazla ${config.max_post_length} karakter olabilir.`);
+    if (body.length > maxLength) {
+      toast.error(`İçerik en fazla ${maxLength} karakter olabilir.`);
       return;
     }
     if (visibility === "private" && !publicKey) {
@@ -72,6 +64,7 @@ function SubmitPage() {
       setVaultOpen(true);
       return;
     }
+
     setBusy(true);
     try {
       let attachment = { attachment_url: "", attachment_name: "", attachment_type: "" };
@@ -85,23 +78,25 @@ function SubmitPage() {
         { visibility, ownerPublicKey: visibility === "private" ? publicKey : null }
       );
 
+      const identity = getAnonIdentity();
       const created = await createPost({
         data: {
           title_cipher: encrypted.ciphers.title,
           body_cipher: encrypted.ciphers.body,
           envelopes: encrypted.envelopes,
           visibility,
+          owner_public_key: visibility === "private" ? publicKey : undefined,
           topic_id: selectedTopic?.id || "",
           topic_slug: selectedTopic?.slug || "",
           topic_name: selectedTopic?.name || "",
-          flair: flair.trim(),
+          flair: flair.trim().toUpperCase(),
           ...attachment,
-          author_name: anonymous ? getAnonIdentity().name : user?.full_name || "kullanıcı",
-          is_anon: anonymous,
-          anon_secret_hash: anonymous ? await anonSecretHash() : "",
-          anon_id: anonymous ? getAnonIdentity().id : "",
+          anon_id: identity.id,
+          author_name: identity.name,
+          anon_secret_hash: await anonSecretHash(),
         },
       });
+
       toast.success("Gönderi istemci tarafında şifrelendi");
       navigate({ to: "/p/$postId", params: { postId: created.id } });
     } catch (error) {
@@ -115,48 +110,53 @@ function SubmitPage() {
     <div className="pt-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Yeni gönderi</h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Başlık ve gövde tarayıcında şifrelenir. Sunucuya yalnızca AES-256-GCM şifreli blok ve RSA-4096 zarfları gider.
+          <span className="mono-label">/ yeni gönderi</span>
+          <h1 className="mt-3 font-display text-3xl font-bold uppercase tracking-tight text-white sm:text-4xl">
+            şifreli gönderi<span className="text-[hsl(var(--neon))]">_</span>
+          </h1>
+          <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted-foreground">
+            başlık ve gövde tarayıcında şifrelenir. sunucuya yalnızca AES-256-GCM şifreli blok ve RSA-4096 zarfları gider.
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--neon))]/30 bg-[hsl(var(--neon))]/10 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-[hsl(var(--neon))]">
+        <span className="inline-flex items-center gap-1.5 border border-[hsl(var(--neon))]/30 bg-[hsl(var(--neon))]/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[hsl(var(--neon))]">
           <ShieldCheck className="h-3 w-3" /> uçtan uca şifreli
         </span>
       </div>
 
-      <form onSubmit={submit} className="mt-8 grid gap-6 lg:grid-cols-[1fr_300px]">
-        <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <form onSubmit={submit} className="mt-8 grid gap-5 lg:grid-cols-[1fr_310px]">
+        <div className="space-y-4 border border-[hsl(200_30%_18%)] bg-white/[0.02] p-5">
           <div className="space-y-2">
-            <Label className="mono-label">başlık</Label>
-            <Input
+            <label className="mono-label" htmlFor="post-title">başlık</label>
+            <input
+              id="post-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Şifrelenecek başlık…"
-              className="rounded-xl border-white/10 bg-white/[0.03]"
+              placeholder="şifrelenecek başlık…"
+              className="h-10 w-full border border-[hsl(200_30%_18%)] bg-black/40 px-3 font-mono text-sm text-white outline-none transition placeholder:text-muted-foreground/60 focus:border-[hsl(var(--neon))]/60"
             />
           </div>
           <div className="space-y-2">
-            <Label className="mono-label">içerik</Label>
-            <Textarea
+            <label className="mono-label" htmlFor="post-body">içerik</label>
+            <textarea
+              id="post-body"
               value={body}
               onChange={(event) => setBody(event.target.value)}
-              placeholder="Markdown desteklenmez; düz metin şifrelenir."
-              className="min-h-[260px] rounded-xl border-white/10 bg-white/[0.03] font-mono text-sm leading-relaxed"
+              placeholder="markdown desteklenmez; düz metin şifrelenir."
+              className="min-h-[280px] w-full resize-y border border-[hsl(200_30%_18%)] bg-black/40 px-3 py-2.5 font-mono text-[13px] leading-relaxed text-white/90 outline-none transition placeholder:text-muted-foreground/60 focus:border-[hsl(var(--neon))]/60"
             />
-            <p className="text-right font-mono text-[10px] text-muted-foreground">
-              {body.length}/{config.max_post_length || 20000}
+            <p className="text-right font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+              {body.length}/{maxLength}
             </p>
           </div>
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="hud-flat p-5">
             <h2 className="mono-label">görünürlük</h2>
             <div className="mt-3 grid gap-2">
               {[
-                { key: "public", label: "Herkese açık", hint: "Topluluk anahtarıyla herkes okuyabilir", icon: Eye },
-                { key: "private", label: "Özel", hint: "Yalnızca senin anahtarın çözer", icon: LockKeyhole },
+                { key: "public", label: "herkese açık", hint: "topluluk anahtarıyla herkes okuyabilir", icon: Eye },
+                { key: "private", label: "özel", hint: "yalnızca senin anahtarın çözer", icon: LockKeyhole },
               ].map(({ key, label, hint, icon: Icon }) => {
                 const disabled = key === "private" && !config.allow_private_posts;
                 return (
@@ -166,37 +166,43 @@ function SubmitPage() {
                     disabled={disabled}
                     onClick={() => setVisibility(key)}
                     className={cn(
-                      "rounded-xl border p-3 text-left transition disabled:opacity-40",
+                      "border p-3 text-left transition disabled:opacity-40",
                       visibility === key
                         ? "border-[hsl(var(--neon))]/50 bg-[hsl(var(--neon))]/10"
-                        : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                        : "border-[hsl(200_30%_18%)] bg-white/[0.02] hover:border-white/25"
                     )}
                   >
-                    <span className="flex items-center gap-2 text-sm text-white">
+                    <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-white">
                       <Icon className="h-3.5 w-3.5" /> {label}
                     </span>
-                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">{hint}</span>
+                    <span className="mt-1 block font-mono text-[9px] text-muted-foreground">{hint}</span>
                   </button>
                 );
               })}
             </div>
             {visibility === "private" && !publicKey && (
-              <Button type="button" size="sm" onClick={() => setVaultOpen(true)} className="mt-3 w-full rounded-xl bg-white text-black">
-                Kasayı oluştur
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setVaultOpen(true)}
+                className="mt-3 w-full rounded-none bg-[hsl(var(--neon))] font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-black hover:bg-[hsl(var(--neon))]/85"
+              >
+                <KeyRound className="mr-1.5 h-3.5 w-3.5" /> kasayı oluştur
               </Button>
             )}
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="space-y-3 hud-flat p-5">
             <div className="space-y-2">
-              <Label className="mono-label">topluluk</Label>
+              <label className="mono-label" htmlFor="post-topic">topluluk</label>
               <select
+                id="post-topic"
                 value={topicId}
                 onChange={(event) => setTopicId(event.target.value)}
-                className="h-9 w-full rounded-xl border border-white/10 bg-[#0b0b10] px-3 text-sm outline-none"
+                className="h-9 w-full border border-[hsl(200_30%_18%)] bg-[#07070c] px-2 font-mono text-xs text-white outline-none focus:border-[hsl(var(--neon))]/60"
               >
                 <option value="">genel</option>
-                {topics.map((topic) => (
+                {(topics || []).map((topic) => (
                   <option key={topic.id} value={topic.id}>
                     #{topic.name}
                   </option>
@@ -204,46 +210,60 @@ function SubmitPage() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label className="mono-label">etiket (flair)</Label>
-              <Input
+              <label className="mono-label" htmlFor="post-flair">etiket (flair)</label>
+              <input
+                id="post-flair"
                 value={flair}
                 onChange={(event) => setFlair(event.target.value)}
                 placeholder="REHBER"
-                className="rounded-xl border-white/10 bg-white/[0.03] font-mono text-xs uppercase"
+                maxLength={24}
+                className="h-9 w-full border border-[hsl(200_30%_18%)] bg-black/40 px-3 font-mono text-xs uppercase outline-none focus:border-[hsl(var(--neon))]/60"
               />
             </div>
 
-            <label className="flex items-center justify-between gap-3 pt-1">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">anonim gönder</span>
-              <Switch checked={anonymous} onCheckedChange={setAnonymous} disabled={!user} />
-            </label>
+            <div className="flex items-center justify-between border-t border-white/[0.06] pt-3">
+              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">yazar</span>
+              <span className="font-mono text-[10px] text-white/80">{handle}</span>
+            </div>
 
             {config.allow_attachments && visibility === "public" && (
-              <div className="space-y-2 pt-2">
-                <Label className="mono-label">ek dosya</Label>
-                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/15 px-3 py-2 text-xs text-muted-foreground hover:border-white/30">
-                  <ImagePlus className="h-3.5 w-3.5" />
+              <div className="space-y-2 pt-1">
+                <span className="mono-label">ek dosya</span>
+                <label className="flex cursor-pointer items-center gap-2 border border-dashed border-[hsl(200_30%_20%)] px-3 py-2 font-mono text-[10px] text-muted-foreground transition hover:border-[hsl(var(--neon))]/50">
+                  <ImagePlus className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{file?.name || "görsel / dosya seç"}</span>
                   <input
                     type="file"
+                    accept="image/*"
                     className="hidden"
-                    accept="image/*,.pdf,.txt,.md,.zip"
                     onChange={(event) => setFile(event.target.files?.[0] || null)}
                   />
                 </label>
-                <p className="font-mono text-[9px] text-muted-foreground">Dosyalar herkese açık bağlantıyla saklanır.</p>
+                <p className="font-mono text-[9px] leading-relaxed text-muted-foreground/60">
+                  ek dosyalar şifrelenmez ve herkese açık bağlantıyla saklanır.
+                </p>
               </div>
             )}
           </div>
 
-          <Button type="submit" disabled={busy} className="w-full rounded-xl bg-white text-black hover:bg-white/90">
-            <Send className="mr-2 h-4 w-4" /> {busy ? "Şifreleniyor…" : "Şifrele ve yayınla"}
+          <Button
+            type="submit"
+            disabled={busy || !title.trim() || !body.trim()}
+            className="h-11 w-full rounded-none bg-[hsl(var(--neon))] font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-black hover:bg-[hsl(var(--neon))]/85"
+          >
+            {busy ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> şifreleniyor…
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-4 w-4" /> şifrele ve yayınla
+              </>
+            )}
           </Button>
-          {!user && (
-            <p className="text-center font-mono text-[10px] text-muted-foreground">
-              Anonim gönderi · <Link to="/login" className="text-[hsl(var(--neon))]">giriş yap</Link> ile kimlik kazan
-            </p>
-          )}
+          <p className="text-center font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground/60">
+            düz metin cihazından çıkmaz
+          </p>
         </aside>
       </form>
 

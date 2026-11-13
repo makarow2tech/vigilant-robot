@@ -1,0 +1,110 @@
+{
+  "name": "Post",
+  "type": "object",
+  "properties": {
+    "topic_id": {
+      "type": "string"
+    },
+    "topic_slug": {
+      "type": "string"
+    },
+    "topic_name": {
+      "type": "string"
+    },
+    "title_cipher": {
+      "type": "string",
+      "description": "AES-256-GCM \u015fifreli ba\u015fl\u0131k"
+    },
+    "body_cipher": {
+      "type": "string",
+      "description": "AES-256-GCM \u015fifreli g\u00f6vde"
+    },
+    "envelopes": {
+      "type": "string",
+      "description": "Sar\u0131lm\u0131\u015f i\u00e7erik anahtarlar\u0131 (JSON)"
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "public",
+        "private"
+      ],
+      "enumColors": [
+        "green",
+        "purple"
+      ]
+    },
+    "owner_public_key": {
+      "type": "string",
+      "description": "\u00d6zel g\u00f6nderide yazar\u0131n a\u00e7\u0131k anahtar\u0131"
+    },
+    "flair": {
+      "type": "string"
+    },
+    "attachment_url": {
+      "type": "string"
+    },
+    "attachment_name": {
+      "type": "string"
+    },
+    "attachment_type": {
+      "type": "string"
+    },
+    "author_id": {
+      "type": "string",
+      "description": "Taray\u0131c\u0131 anonim kimli\u011fi"
+    },
+    "author_name": {
+      "type": "string"
+    },
+    "is_anon": {
+      "type": "boolean"
+    },
+    "upvotes": {
+      "type": "number"
+    },
+    "downvotes": {
+      "type": "number"
+    },
+    "score": {
+      "type": "number"
+    },
+    "comment_count": {
+      "type": "number"
+    },
+    "is_pinned": {
+      "type": "boolean"
+    },
+    "is_locked": {
+      "type": "boolean"
+    },
+    "is_removed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "title_cipher",
+    "body_cipher",
+    "envelopes",
+    "author_id",
+    "author_name"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

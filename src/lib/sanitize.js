@@ -1,4 +1,4 @@
-// Kullanıcı/başlık kaynaklı HTML ve CSS için temel temizlik.
+// Kullanıcı kaynaklı HTML ve CSS için temel temizlik.
 export function sanitizeHtml(html) {
   if (!html) return "";
   return html

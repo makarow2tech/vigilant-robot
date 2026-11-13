@@ -1,7 +1,7 @@
 // ============================================================================
 // KRYPT · uçtan uca şifreleme çekirdeği
-// İçerik: AES-256-GCM  ·  Kişisel anahtarlar: RSA-OAEP (4096 bit, SHA-256)
-// Public içerik anahtarı: AES-256 zarf (topluluk anahtarı, istemcide türetilir)
+// AES-256-GCM · Kişisel anahtarlar RSA-OAEP (4096 bit, SHA-256)
+// Public içerik anahtarı: topluluk anahtarıyla AES-256 zarf
 // Kasa: PBKDF2-SHA256 (310k iterasyon) ile türetilen AES anahtarı
 // Hiçbir düz metin sunucuya gitmez; sunucu yalnızca şifreli blok ve zarfları saklar.
 // ============================================================================
@@ -35,9 +35,8 @@ export async function sha256Hex(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Topluluk anahtarı — public gönderiler herkes tarafından okunabilsin diye
-// istemcide türetilir. Sunucu bu anahtarın hiçbir parçasını saklamaz; çözme
-// daima tarayıcıda yapılır.
+// Topluluk anahtarı — herkese açık gönderiler herkes tarafından okunabilsin diye
+// istemcide türetilir. Sunucu bu anahtarın hiçbir parçasını saklamaz.
 // ---------------------------------------------------------------------------
 const COMMUNITY_PASSPHRASE = "krypt.community.v1";
 const COMMUNITY_SALT = "krypt.community.salt";
@@ -62,7 +61,7 @@ export function communityKey() {
 }
 
 // ---------------------------------------------------------------------------
-// Kişisel anahtar çifti (RSA-4096) — yalnızca özel içerik ve kasa için
+// Kişisel anahtar çifti (RSA-4096)
 // ---------------------------------------------------------------------------
 const RSA_PARAMS = { name: "RSA-OAEP", hash: "SHA-256" };
 const RSA_GEN = {
@@ -80,11 +79,11 @@ function importRsaPrivate(jwk) {
   return crypto.subtle.importKey("jwk", jwk, RSA_PARAMS, true, ["decrypt"]);
 }
 
-// content key cache: aynı zarfla gelen kartlar için tekrar çözme yapılmaz
+// aynı zarfla gelen kartlar için tekrar çözme yapılmaz
 const keyCache = new Map();
 
 async function unwrapContentKey(envelope, privateKeyJwk) {
-  const cacheKey = String(envelope.ct).slice(0, 64);
+  const cacheKey = `${envelope.scope}:${String(envelope.ct).slice(0, 96)}`;
   if (keyCache.has(cacheKey)) return keyCache.get(cacheKey);
 
   let raw;
@@ -109,7 +108,6 @@ async function unwrapContentKey(envelope, privateKeyJwk) {
 // ---------------------------------------------------------------------------
 // Şifreleme / çözme
 // ---------------------------------------------------------------------------
-
 export async function encryptText(text, { visibility = "public", ownerPublicKey = null } = {}) {
   const rawKey = randomBytes(32);
   const aesKey = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
@@ -131,7 +129,7 @@ export async function encryptText(text, { visibility = "public", ownerPublicKey 
     const key = await communityKey();
     const wrapIv = randomBytes(12);
     const wrapped = await crypto.subtle.encrypt({ name: "AES-GCM", iv: wrapIv }, key, rawKey);
-    envelopes.push({ scope: "community", alg: "AES-256-KW", ct: `${toB64(wrapIv)}.${toB64(wrapped)}` });
+    envelopes.push({ scope: "community", alg: "AES-256-GCM", ct: `${toB64(wrapIv)}.${toB64(wrapped)}` });
   }
 
   return {
@@ -192,9 +190,8 @@ export async function encryptFields(fields, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Kasa (kişisel anahtar çifti + parola ile korunan özel anahtar)
+// Kasa
 // ---------------------------------------------------------------------------
-
 const KDF_ITERATIONS = 310000;
 
 async function deriveWrappingKey(passphrase, salt) {
@@ -221,11 +218,7 @@ export async function createVault(passphrase) {
   const salt = randomBytes(16);
   const iv = randomBytes(12);
   const wrapKey = await deriveWrappingKey(passphrase, salt);
-  const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    wrapKey,
-    enc.encode(JSON.stringify(privateKeyJwk))
-  );
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, wrapKey, enc.encode(JSON.stringify(privateKeyJwk)));
 
   return {
     publicKeyJwk,

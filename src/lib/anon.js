@@ -1,5 +1,6 @@
 import { sha256Hex } from "@/lib/crypto";
 
+// Bu tarayıcının anonim kimliği. Hesap yok: kimlik cihaza bağlıdır.
 const KEY = "krypt.anon";
 
 function randomId(len = 6) {
@@ -36,8 +37,7 @@ export async function anonSecretHash() {
   return identity.secret ? sha256Hex(identity.secret) : "";
 }
 
-// Kimlik: giriş yapmış kullanıcı ya da bu tarayıcının anonim anahtarı
-export function voterKey(user) {
-  if (user?.id) return user.id;
+// Oy ve kayıt anahtarı: bu tarayıcının anonim kimliği
+export function voterKey() {
   return getAnonIdentity().id;
 }

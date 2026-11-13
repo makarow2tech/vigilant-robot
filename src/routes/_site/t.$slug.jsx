@@ -1,16 +1,15 @@
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
-import { Lock } from "lucide-react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import PostCard from "@/components/forum/PostCard";
 import { listFeed, listTopics } from "@/lib/server-fns";
 import { useDecryptedPosts } from "@/lib/useDecrypt";
-import { sanitizeCss, sanitizeHtml } from "@/lib/sanitize";
+import { useMyState } from "@/lib/useMyState";
 
 export const Route = createFileRoute("/_site/t/$slug")({
   loader: async ({ params }) => {
     const [topics, feed] = await Promise.all([
       listTopics(),
-      listFeed({ data: { sort: "top", topicSlug: params.slug, limit: 30 } }),
+      listFeed({ data: { sort: "top", topicSlug: params.slug, limit: 50 } }),
     ]);
     const topic = (topics || []).find((item) => item.slug === params.slug);
     if (!topic) throw notFound();
@@ -22,63 +21,73 @@ export const Route = createFileRoute("/_site/t/$slug")({
 
 function TopicPage() {
   const { topic, feed } = Route.useLoaderData();
-  const decoded = useDecryptedPosts(feed.items);
-  const css = sanitizeCss(topic.custom_css || "");
-  const html = sanitizeHtml(topic.custom_html || "");
+  const items = feed.items || [];
+  const decoded = useDecryptedPosts(items);
+  const myState = useMyState(items.map((post) => post.id));
 
   return (
     <div className="pt-8">
-      {css && <style dangerouslySetInnerHTML={{ __html: css }} />}
-      <Link to="/topics" className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-white">
+      <Link
+        to="/topics"
+        className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition hover:text-white"
+      >
         <ArrowLeft className="h-3 w-3" /> topluluklar
       </Link>
 
       <header
-        className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.03] p-6 sm:p-9"
-        style={{ boxShadow: `0 0 80px -50px ${topic.accent}` }}
+        className="mt-4 overflow-hidden hud scanlines p-6 sm:p-9"
+        style={{ boxShadow: `0 0 100px -70px ${topic.accent}` }}
       >
-        {html ? (
-          <div dangerouslySetInnerHTML={{ __html: html }} />
-        ) : (
-          <>
-            <span
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 font-heading text-lg"
-              style={{ color: topic.accent, borderColor: `${topic.accent}55` }}
-            >
-              {topic.icon || "#"}
-            </span>
-            <h1 className="mt-4 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">#{topic.name}</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">{topic.description}</p>
-          </>
+        <span
+          className="inline-flex h-11 w-11 items-center justify-center border font-display text-lg"
+          style={{ color: topic.accent, borderColor: `${topic.accent}55` }}
+        >
+          {topic.icon || "#"}
+        </span>
+        <h1 className="mt-4 font-display text-3xl font-bold uppercase tracking-tight text-white sm:text-4xl">
+          #{topic.name}
+        </h1>
+        {topic.description && (
+          <p className="mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">{topic.description}</p>
         )}
-        <div className="mt-5 flex flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground">
+        <div className="mt-5 flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
           <span>{topic.post_count || 0} gönderi</span>
-          <span className="text-white/20">·</span>
+          <span className="text-white/15">·</span>
           <span className="inline-flex items-center gap-1.5">
             <Lock className="h-3 w-3 text-[hsl(var(--neon))]" /> uçtan uca şifreli
           </span>
-          {topic.is_private && <span className="rounded border border-white/15 px-1.5 text-[10px]">KAPALI</span>}
         </div>
       </header>
 
       {topic.rules && (
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+        <div className="mt-4 hud-flat p-4">
           <h2 className="mono-label">topluluk kuralları</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{topic.rules}</p>
+          <p className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
+            {topic.rules}
+          </p>
         </div>
       )}
 
-      <div className="mt-6 space-y-3">
-        {feed.items?.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/12 px-6 py-12 text-center">
-            <p className="text-sm text-muted-foreground">Bu toplulukta henüz gönderi yok.</p>
-            <Link to="/submit" className="mt-3 inline-block text-sm text-[hsl(var(--neon))]">
-              İlk gönderiyi oluştur
+      <div className="mt-6 space-y-2.5">
+        {items.length === 0 && (
+          <div className="border border-dashed border-[hsl(200_30%_20%)] px-6 py-12 text-center">
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
+              bu toplulukta henüz gönderi yok
+            </p>
+            <Link to="/submit" className="mt-3 inline-block font-mono text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--neon))]">
+              ilk gönderiyi oluştur →
             </Link>
           </div>
         )}
-        {(feed.items || []).map((post, index) => (
-          <PostCard key={post.id} post={post} decoded={decoded[post.id]} index={index} />
+        {items.map((post, index) => (
+          <PostCard
+            key={post.id}
+            post={post}
+            decoded={decoded[post.id]}
+            index={index}
+            myVote={myState.votes[post.id] || 0}
+            saved={Boolean(myState.saved[post.id])}
+          />
         ))}
       </div>
     </div>

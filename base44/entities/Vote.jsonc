@@ -1,0 +1,50 @@
+{
+  "name": "Vote",
+  "type": "object",
+  "properties": {
+    "target_type": {
+      "type": "string",
+      "enum": [
+        "post",
+        "comment"
+      ],
+      "enumColors": [
+        "blue",
+        "pink"
+      ]
+    },
+    "target_id": {
+      "type": "string"
+    },
+    "voter_key": {
+      "type": "string"
+    },
+    "value": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "target_type",
+    "target_id",
+    "voter_key",
+    "value"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

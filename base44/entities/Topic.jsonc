@@ -1,0 +1,62 @@
+{
+  "name": "Topic",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "G\u00f6r\u00fcnen topluluk ad\u0131"
+    },
+    "slug": {
+      "type": "string",
+      "description": "URL i\u00e7in tekil kimlik"
+    },
+    "description": {
+      "type": "string"
+    },
+    "accent": {
+      "type": "string",
+      "description": "Vurgu rengi (hex)"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Tek karakter simge"
+    },
+    "rules": {
+      "type": "string"
+    },
+    "is_private": {
+      "type": "boolean"
+    },
+    "post_count": {
+      "type": "number"
+    },
+    "member_count": {
+      "type": "number"
+    },
+    "pinned": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "slug"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
